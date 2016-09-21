@@ -5,14 +5,20 @@
     <meta charset="utf-8">
     <title>Animated Visualization Viewer</title>
     <style>
-      . {
+       body {
         font-size: 20pt;
+        font-family: arial;
       }
 
       svg {
         float: left;
         margin: 30px;
       }
+      #message {
+        position:absolute; top: 20px; width: 60%; height: 80%; left: 15%; border: 5px solid grey; padding: 10px; background: white;
+        font-size: 12pt;
+      }
+
 
       rect {
         shape-rendering: crispEdges;
@@ -42,13 +48,23 @@
     </style>
   </head>
   <body>
+    <div style="padding: 30px">
+      <p>
+        This page shows example animations for the following CHI 2017 submissions
+        <ul>
+          <li>Graphical Perception in Animated Bar Charts
+          <li>Effects of Approximation on Graphical Perception of Animated Bar Charts
+        </ul>
+      </p>
+    </div>
+
+
     <svg id="svg"></svg>
     <select id="selector"></select><br/>
     <button id="start">Start animation</button>
     <br>
     <span id="countdown"></span>
-    <div id="message" style="position:absolute; top: 20px; width: 60%; height: 80%; left: 15%; border: 5px solid grey; padding: 10px; background: white">
-
+    <div id="message">
     <p>In these tasks, you will be presented with an animated <a href="http://en.wikipedia.org/wiki/Bar_chart" target="_blank">bar chart</a>. One of the bars is marked with a <span style="color:lightsalmon;">light salmon</span> color fill. You must answer the following question:</p>
 
     <p><b>Judge the maximum height reached by the marked bar as a percentage of the total chart height</b>.</p>
