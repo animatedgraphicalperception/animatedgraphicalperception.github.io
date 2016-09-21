@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="./jquery.js"></script>
+    <meta charset="utf-8">
+    <title>Animated Visualization Viewer</title>
+    <style>
+      . {
+        font-size: 20pt;
+      }
+
+      svg {
+        float: left;
+        margin: 30px;
+      }
+
+      rect {
+        shape-rendering: crispEdges;
+      }
+
+      .styled-select select {
+        margin-top: 30px;
+        font-size: 20pt;
+        overflow: hidden;
+        
+      }
+
+    select, button {
+      font-size: 12pt;
+      width: 33em;
+      padding: 15px;
+      height: 70px;
+      color: black;
+      margin-top: 30px;
+      -webkit-appearance: none;
+    }
+    button {
+      background: white;
+    }
+
+
+    </style>
+  </head>
+  <body>
+    <svg id="svg"></svg>
+    <select id="selector"></select><br/>
+    <button id="start">Start animation</button>
+    <br>
+    <span id="countdown"></span>
+    <div id="message" style="position:absolute; top: 20px; width: 60%; height: 80%; left: 15%; border: 5px solid grey; padding: 10px; background: white">
+
+    <p>In these tasks, you will be presented with an animated <a href="http://en.wikipedia.org/wiki/Bar_chart" target="_blank">bar chart</a>. One of the bars is marked with a <span style="color:lightsalmon;">light salmon</span> color fill. You must answer the following question:</p>
+
+    <p><b>Judge the maximum height reached by the marked bar as a percentage of the total chart height</b>.</p>
+
+    <p>To play the animation, click the "Start animation" button. After 3 seconds, the animation will begin playing. You may only play the animation once per task, so make sure to pay attention while the animation is playing.</p>
+
+    <p>You should make a quick visual judgment and not try to make precise measurements, either mentally or with a physical object such as a pencil or your finger. A variety of different charts will be shown. Valid answers range from 0% to 100%, though in practice you shouldn't see values less than 5% or greater than 95%.</p>
+
+    <p>You will receive a $0.05 reward for each task completed. You can keep track of your accumulated reward in the blue "Current Reward" box. After completing all of the tasks, you will receive a $1.00 completion bonus reward. You <b>must</b> complete all the tasks to receive the completion bonus. If you do not wish to complete all the tasks, you can press the "Finish and claim current reward" button to exit this HIT and be paid your accumulated reward. You will only be paid once you complete all the tasks or click the finish button.</p>
+
+    <p>The results of these tasks will be used for a research study on visual perception. You may view our <a href="../policy/" target="_blank">privacy policy</a> for more information.</p>
+    <button id="closebtn">
+    close this box
+    </button>
+    </div>
+
+
+
+
+    <script src="./d3.v3.min.js"></script>
+    <script src="./seedrandom.min.js"></script>
+    <script>
+      // Random seed
+      var seed = 'perceptvis';
+      Math.seedrandom(seed);
+
+      // Setup canvas
+      var width = height = 380;
+
+      // Scaling information
+      var yscale = d3.scale.linear()
+                    .range([height, 0]);
+      var y = function(d) { return yscale(d.y); };
+      var xscale = d3.scale.ordinal()
+                .domain(d3.range(5))
+                .rangeBands([0, width], 0, 1.2);
+      var x = function(d) { return xscale(d.x); };
+
+      // SVG container elements
+      var svg = d3.select('#svg').attr({
+        width: width + 2,
+        height: height + 2 + 10
+      });
+      svg.append('g')
+        .attr({transform: "translate(1,1)"})
+        .append('rect').attr({
+          width: width,
+          height: height,
+          fill: 'white',
+          stroke: 'black'
+        });
+      var rectContainer = svg.append('g').attr({transform: "translate(1,1)"});
+      var circleContainer = svg.append('g').attr({transform: "translate(1,1)"});
+      var progressContainer = svg.append('g').attr({transform: "translate(1,1)"});
+      progressContainer.append('rect').attr({
+        y: height,
+        width: width,
+        height: 10,
+        fill: 'white',
+        stroke: 'black'
+      });
+      progressContainer.append('rect').attr({
+        id: 'progress',
+        y: height,
+        width: 0,
+        height: 10,
+        fill: 'rgb(220,220,220)',
+        stroke: 'black'
+      });
+
+      // Render a data frame
+      // @param data: list of { "x": .. "y": .. } rect coordinates
+      // @param marking: either "color" or "circle"
+      var render = function(data, marking) {
+        var rects = rectContainer.selectAll('rect').data(data);
+
+        rects.attr({
+          x: x,
+          y: y,
+          width: xscale.rangeBand(),
+          height: function(d) { return height - y(d); }
+        });
+
+        rects.enter().append('rect').attr({
+          x: x,
+          y: y,
+          width: xscale.rangeBand(),
+          height: function(d) { return height - y(d); },
+          fill: function(d) { 
+            return (marking == "color" && d.x == 2) ? 'lightsalmon' : 'white';
+          },
+          stroke: 'black'
+        });
+
+        rects.exit().remove();
+
+        var highlights;
+        if (marking == "circle") {
+          highlights = [{x: 2, y: 0.03}];
+        } else {
+          highlights = [];
+        }
+        var circles = circleContainer.selectAll('circle').data(highlights);
+
+        circles.attr({
+          cx: function(d) { return x(d) + xscale.rangeBand() / 2},
+          cy: y
+        });
+
+        circles.enter().append('circle').attr({
+          cx: function(d) { return x(d) + xscale.rangeBand() / 2},
+          cy: y,
+          r: 3,
+          fill: 'white',
+          stroke: 'black'
+        });
+
+        circles.exit().remove();
+      };
+
+      // Load test data from json file, and render it
+      var dataset;
+      var dataSelector = document.querySelector('#selector');
+      var startAnimation = function() {
+        animationButton.disabled = true;
+        dataSelector.disabled = true;
+        var count = 0;
+        var countElem = document.querySelector('#countdown');
+        var countdown = function() {
+          if (count == 0) {
+            countElem.textContent = "";
+            setTimeout(stopAnimation, 1000 * (dataset[dataSelector.value]['frames'].length / dataset[dataSelector.value]['fps']));
+            animate(dataset[dataSelector.value]);
+            return;
+          }
+          countElem.textContent = "The animation will start in " + count + " seconds...";
+          count--;
+          setTimeout(countdown, 1000);
+        };
+        countdown();
+      }
+      var stopAnimation = function() {
+        animationButton.disabled = false;
+        dataSelector.disabled = false;
+      }
+
+      //
+      // XXX: this is what starts an animation
+      //
+      var animationButton = document.querySelector('#start');
+      animationButton.addEventListener('click', startAnimation);
+
+      //
+      // XXX: change the json file here to change the experiment
+      //
+      //d3.json('between_frame_copy_approximation.json', function(error, json) {
+      d3.json('paper_animated_examples.json', function(error, json) {
+        if (error) return console.error(error);
+        dataset = json;
+        var option;
+        for (var i = 0; i < dataset.length; i++) {
+          option = document.createElement('option');
+          option.text = dataset[i].id;
+          option.value = i;
+          dataSelector.appendChild(option);
+        }
+      });
+
+      // Generates a power trend function (bar height changes exponentially over time)
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param frames: Number of frames - 1
+      // @param noise: Standard deviation for random normal distribution
+      var powerTrend = function(exp, max, max_position, frames, noise) {
+        var f = Math.floor(max_position * frames);
+        var left = d3.scale.pow().domain([0, f]).range([0.05, max]).exponent(exp);
+        var right = d3.scale.pow().domain([0, frames-f]).range([0.05, max]).exponent(exp);
+        var fn = function(frame) {
+          var result;
+          if (frame < f) {
+            var randLeft = d3.random.normal(left(frame), noise);
+            do {
+              result = randLeft();
+            } while(result >= max || result < 0.05);
+            return result;
+          }
+          if (frame == f) {
+            return max;
+          }
+          var randRight = d3.random.normal(right(frames - frame), noise);
+          do {
+            result = randRight();
+          } while(result >= max || result < 0.05);
+          return result;
+        }
+        return fn;
+      }
+
+      // Generates a power trend function (bar height changes exponentially over time) with relative noise
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param frames: Number of frames - 1
+      // @param noise: Standard deviation for random normal distribution
+      var relativeNoiseTrend = function(exp, max, max_position, frames, noise) {
+        var f = Math.floor(max_position * frames);
+        var left = d3.scale.pow().domain([0, f]).range([0.05, max]).exponent(exp);
+        var right = d3.scale.pow().domain([0, frames-f]).range([0.05, max]).exponent(exp);
+        var uniformRand = function(height) {
+          return Math.random() * (((1+noise)*height) - ((1-noise)*height)) + ((1-noise)*height);
+        };
+        var fn = function(frame) {
+          var result;
+          if (frame < f) {
+            do {
+              result = uniformRand(left(frame));
+            } while(result >= max || result < 0.05);
+            return result;
+          }
+          if (frame == f) {
+            return max;
+          }
+          do {
+            result = uniformRand(right(frames - frame));
+          } while(result >= max || result < 0.05);
+          return result;
+        }
+        return fn;
+      }
+
+      // Generates a linear trend function (how bar height changes over time)
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param frames: Number of frames - 1
+      // @param noise: Standard deviation for random normal distribution
+      var trend = function(max, max_position, frames, noise) {
+        var f = Math.floor(max_position * frames);
+        var boundedRand = function(i) { return Math.random() * (i - 0.05) + 0.05; };
+        var left = d3.scale.linear().domain([0, f]).range([boundedRand(max), max]);
+        var right = d3.scale.linear().domain([f, frames]).range([max, boundedRand(max)]);
+        var fn = function(frame) {
+          var result;
+          if (frame < f) {
+            var randLeft = d3.random.normal(left(frame), noise);
+            do {
+              result = randLeft();
+            } while(result >= max || result < 0.05);
+            return result;
+          }
+          if (frame == f) {
+            return max;
+          }
+          var randRight = d3.random.normal(right(frame), noise);
+          do {
+            result = randRight();
+          } while(result >= max || result < 0.05);
+          return result;
+        }
+        return fn;
+      }
+
+      var generateRandomData = function(fps) {
+        var duration = 2;
+        var marking = "circle";
+
+        var random = function(i) { return {x: i, y: Math.random() * (0.95 - 0.05) + 0.05}; };
+        var gendata = function(i) { return d3.range(5).map(random); };
+        var frames = d3.range(duration*fps).map(gendata);
+
+        var data = {};
+        data['fps'] = fps;
+        data['marking'] = marking;
+        data['frames'] = frames;
+
+        return data;
+      }
+
+      var generateQualificationData = function() {
+        var duration = 2;
+        var fps = 10;
+        var halfway = Math.floor(0.5*((duration*fps)-1));
+        var marking = "circle";
+        var halfTrend = d3.scale.linear().domain([0, halfway]).range([0.1, 0.95]);
+        var trendFn = function(i) {
+          if (i > halfway) {
+            return 0.95;
+          } else {
+            return halfTrend(i);
+          }
+        }
+        var random = function(i) { return {x: i, y: Math.random() * (0.95 - 0.05) + 0.05}; };
+        var gendata = function(i) {
+          var group = d3.range(5).map(random);
+          group[2].y = trendFn(i);
+          return group;
+        };
+        var frames = d3.range(duration*fps).map(gendata);
+
+        var data = {};
+        data['fps'] = fps;
+        data['marking'] = marking;
+        data['frames'] = frames;
+
+        return data;
+      }
+
+      // Randomly generates a dataset that varies linearly
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Standard deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @return JS object of data
+      var generateChartData = function(max, max_position, noise, duration, fps, marking) {
+        var trendFn = trend(max,max_position,duration*fps-1,noise);
+        var random = function(i) { return {x: i, y: Math.random() * (0.95 - 0.05) + 0.05}; };
+        var gendata = function(i) {
+          var group = d3.range(5).map(random);
+          group[2].y = trendFn(i);
+          return group;
+        };
+        var frames = d3.range(duration*fps).map(gendata);
+
+        var data = {};
+        data['id'] = fps + '-' + max_position + '-' + (100 * max);
+        data['type'] = "test";
+        data['fps'] = fps;
+        data['max_frame'] = max_position;
+        data['max'] = max;
+        data['seed'] = seed;
+        data['noise'] = noise;
+        data['duration'] = 2;
+        data['marking'] = marking;
+        data['frames'] = frames;
+
+        return data;
+      }
+
+      // Renders a randomly generated dataset, and returns a JSON string
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Std. deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @return JSON string representation of data rendered
+      var renderChartData = function(max, max_position, noise, duration, fps, marking) {
+        var data = generateChartData(max, max_position, noise, duration, fps, marking);
+        animate(data);
+        return JSON.stringify(data);
+      }
+
+      // Randomly generates a dataset using power functions for the trend
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Standard deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @return JS object of data
+      var generatePowerChartData = function(exp, max, max_position, noise, duration, fps, marking) {
+        var trendFn = powerTrend(exp,max,max_position,duration*fps-1,noise);
+        var random = function(i) { return {x: i, y: Math.random() * (0.95 - 0.05) + 0.05}; };
+        var gendata = function(i) {
+          var group = d3.range(5).map(random);
+          group[2].y = trendFn(i);
+          return group;
+        };
+        var frames = d3.range(duration*fps).map(gendata);
+
+        var data = {};
+        data['id'] = 'fps-' + fps + '-exp-' + exp + '-maxpos-' + max_position + '-max-' + (100 * max);
+        data['type'] = "test";
+        data['exponent'] = exp;
+        data['fps'] = fps;
+        data['max_frame'] = max_position;
+        data['max'] = max;
+        data['seed'] = seed;
+        data['noise'] = noise;
+        data['duration'] = duration;
+        data['marking'] = marking;
+        data['frames'] = frames;
+
+        return data;
+      }
+
+      // Transforms a dataset using between frame approximation
+      // @param frames: Dataset to transform
+      // @param drop_count: Number of frames to remove
+      // @param drop_type: How to fill in the dropped frame, either "copy" or "interpolate"
+      // @return transformed frames dataset
+      var betweenFrameApprox = function(frames, drop_count, drop_type) {
+        var randomIndex, index;
+        var indices = [];
+        var linear = function (m, b) {
+          var f = function(x) {
+            return m * x + b;
+          };
+          return f;
+        };
+
+        for (var i = 0; i < drop_count; i++) {
+          do {
+            randomIndex = Math.floor(Math.random() * (frames.length - 2)) + 1;
+          } while (indices.indexOf(randomIndex) != -1);
+          indices.push(randomIndex);
+        }
+
+        indices.sort(function(a, b) {
+          return a - b;
+        });
+
+        for (var j = 0; j < indices.length; j++) {
+          index = indices[j];
+          if (drop_type == "copy")
+            frames[index] = frames[index - 1];
+          else if (drop_type == "interpolation") {
+            var firstIndex = index;
+            while (j < indices.length - 1 && indices[j+1] == indices[j] + 1)
+              j++;
+            var lastIndex = indices[j];
+            // interpolate between firstIndex - 1 and lastIndex + 1
+            for (var k = 0; k < frames[index].length; k++) {
+              var m = (frames[lastIndex+1][k].y - frames[firstIndex-1][k].y) / (lastIndex - firstIndex + 2);
+              var b = frames[firstIndex-1][k].y;
+              var s = linear(m, b);
+              for (var l = 1; l <= lastIndex - firstIndex + 1; l++) {
+                frames[firstIndex + l - 1][k].y = s(l);
+              }
+            }
+          }
+        }
+
+        return frames;
+      }
+
+      var average_types = [
+        { min: 2, max: 2 },
+        { min: 1, max: 2 },
+        { min: 2, max: 3 },
+        { min: 1, max: 3 },
+        { min: 0, max: 3 },
+        { min: 1, max: 4 },
+        { min: 0, max: 4 }
+      ];
+
+      // Transforms a dataset using within frame approximation
+      // @param frames: Dataset to transform
+      // @param average_type: Specifies which window to use for averaging
+      // @return transformed frames dataset
+      var withinFrameApprox = function(frames, average_type) {
+        var minIndex = average_types[average_type].min;
+        var maxIndex = average_types[average_type].max
+        for (var i = 0; i < frames.length; i++) {
+          var sum = 0;
+          for (var j = minIndex; j <= maxIndex; j++) {
+            sum += frames[i][j].y;
+          }
+          var avg = sum / (maxIndex - minIndex + 1);
+          for (var j = minIndex; j <= maxIndex; j++) {
+            frames[i][j].y = avg;
+          }
+        }
+
+        return frames;
+      }
+
+      // Renders a transformed dataset using between frame approximation
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Std. deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @param drop_percent: Percentage of total frames to remove
+      // @param drop_type: How to fill in the dropped frame, either "copy" or "interpolate"
+      // @return JSON string representation of data rendered
+      var renderBetweenFrameApprox = function(exp, max, max_position, noise, duration, fps, marking, drop_percent, drop_type) {
+        var data = generatePowerChartData(exp, max, max_position, noise, duration, fps, marking);
+        data.frames = betweenFrameApprox(data.frames, duration * fps * drop_percent, drop_type);
+        animate(data);
+        return JSON.stringify(data);
+      }
+
+      // Renders a transformed dataset using within frame approximation
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Std. deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @param average_type: Specifies which window to use for averaging
+      // @return JSON string representation of data rendered
+      var renderWithinFrameApprox = function(exp, max, max_position, noise, duration, fps, marking, average_type) {
+        var data = generatePowerChartData(exp, max, max_position, noise, duration, fps, marking);
+        data.frames = withinFrameApprox(data.frames, average_type);
+        animate(data);
+        return JSON.stringify(data);
+      }
+
+      // Renders a randomly generated dataset, and returns a JSON string
+      // @param exp: Exponent of the power function
+      // @param max: Max height of highlighted bar as a percentage of bar chart height (eg. 0.18, 0.55)
+      // @param max_position: Frame which holds max height as a percentage of total frames (eg. 0, 0.5, 1)
+      // @param noise: Std. deviation for random distribution
+      // @param duration: Number of seconds to run the animation
+      // @param fps: Number of frames per second
+      // @return JSON string representation of data rendered
+      var renderPowerChartData = function(exp, max, max_position, noise, duration, fps, marking) {
+        var data = generatePowerChartData(exp, max, max_position, noise, duration, fps, marking);
+        animate(data);
+        return JSON.stringify(data);
+      }
+
+      // Render an animation based on data parameter
+      // @param data has keys:
+      //   fps: Number of frames per second
+      //   frames: Array of data. Each data is an Array of { x:, y: } objects
+      var animate = function(data) {
+        var timeout = 1000.0 / data['fps'];
+
+        var i = 0;
+        var f = function() {
+          if (i >= data['frames'].length) {
+            render([]);
+            return;
+          }
+
+          render(data['frames'][i], data['marking']);
+          i = i + 1;
+          setTimeout(f, timeout);
+        };
+        f();
+
+        var progressBar = progressContainer.select('rect#progress');
+        progressBar.attr({ width: 0 })
+                    .transition()
+                    .ease('linear')
+                    .duration(1000 * (data['frames'].length / data['fps']))
+                    .attr({ width: width });
+      };
+
+    </script>
+    <script>
+      $("#closebtn").click(function() {
+        $("#message").hide();
+      });
+    </script>
+
+  </body>
+</html>
